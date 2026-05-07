@@ -1,0 +1,29 @@
+# Pintos build outputs
+src/**/build/
+src/**/build-*/
+*.o
+*.d
+*.s
+*.asm
+*.sym
+*.out
+*.bin
+*.dsk
+*.img
+*.log
+*.output
+*.result
+*.errors
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+*~
+*.swp
+
+# Local environment/tool outputs
+bin/
+misc/
+bochs/
+pintos-toolchains/

@@ -1,0 +1,52 @@
+    		+-------------------------+
+    		|      CompSci 143A       |
+    		| PROJECT 0: Getting Real |
+    		|     DESIGN DOCUMENT     |
+    		+-------------------------+
+
+
+---- AUTHOR ----
+
+> > Fill in your name and email address.
+
+Juie Yao <jiachy18@uci.edu>
+
+---- PRELIMINARIES ----
+
+> > If you have any preliminary comments on your submission, or notes for the
+> > TAs, please give them here.
+
+> > Please cite any offline or online sources you consulted while
+> > preparing your submission, other than the Pintos documentation, course
+> > text, lecture notes, and course staff.
+
+    		     Booting Pintos
+    		     ==============
+
+---- QUESTIONS ----
+
+> > Put the screenshots of Pintos running in src/p0.
+> > A1: Is there any particular issue that you would like us to know?
+
+    		     Kernel Monitor
+    		     ==============
+				 
+>	I initially encountered environment issues on Openlab because the Pintos utility paths and the compatible compiler toolchain path were not persistently configured in my shell environment. After adding the required paths, rebuilding in the threads directory, and verifying Bochs execution, I successfully ran `pintos --bochs -- run alarm-zero`. I also copied `squish-pty` into the Pintos bin directory so terminal input works correctly for the interactive kernel monitor.
+
+---- DATA STRUCTURES ----
+
+> > C1: Copy here the declaration of each new or changed `struct` or
+> >`struct` member, global or static variable, `typedef`, or
+> > enumeration. Identify the purpose of each in 25 words or less.
+
+> I don't have any new struct, struct member, global/static variable, typedef, or enumeration that was added.  I only two new static helper functions in `init.c` for the kernel monitor: one to read a line from console input and one to run the interactive command loop.
+
+---- ALGORITHMS ----
+
+> > C2: Explain how you read and write to the console for the kernel monitor.
+
+> The kernel monitor will reads input one character at a time from the Pintos input layer using `input_getc()`. Each typed character is echoed back to the console with `putchar()`, and the command is terminated when a newline is received. Output is printed using `printf()`. After a full line is read into a small fixed-size buffer, the monitor compares the command string against `whoami` and `exit`. Any other input prints `invalid command`.
+
+> > C3: Any additional enhancement you implement?
+
+> I add a small additional enhancement to support for backspace/delete during command entry. When the monitor detects delete/backspace input, it will removes the most recent character from the command buffer, updates the null terminator, and erases the character from the console display. Also, empty input lines are ignored and we will simply redisplay the prompt.
