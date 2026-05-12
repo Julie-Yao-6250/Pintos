@@ -92,8 +92,18 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  // Initialize semaphore to access ready queue
+  struct semaphore sema;
+  sema_init(&sema, 0);
+  
+  // Add the current thread to the ready queue and block it until the timer interrupt wakes it up
+  while (timer_elapsed(start) < ticks) {
+    sema_down(&sema);
+  }
+  sema_up(&sema);
+
+  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
