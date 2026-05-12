@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "kernel/list.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -19,6 +20,10 @@
 
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
+
+static struct list sleepers; // List of sleeping threads
+
+static struct semaphore sema; // Semaphore to protect access to the sleepers list
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -37,8 +42,12 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
-}
+  list_init(&sleepers);
 
+  // Initialize semaphore to protect access to the sleepers list
+  
+  sema_init(&sema, 1);
+}
 /* Calibrates loops_per_tick, used to implement brief delays. */
 void
 timer_calibrate (void) 
@@ -84,6 +93,15 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+/* Compares the wakeup times of two sleeping threads to 
+   determine their order in the sleepers list */
+bool
+compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  int64_t wakeup_time_a = list_entry(a, struct thread, elem)->wakeup_time;
+  int64_t wakeup_time_b = list_entry(b, struct thread, elem)->wakeup_time;
+  return wakeup_time_a < wakeup_time_b;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
@@ -93,15 +111,21 @@ timer_sleep (int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON);
 
-  // Initialize semaphore to access ready queue
-  struct semaphore sema;
-  sema_init(&sema, 0);
+  // while (timer_elapsed (start) < ticks) 
+  //   thread_yield ();
+
+  
   
   // Add the current thread to the ready queue and block it until the timer interrupt wakes it up
-  while (timer_elapsed(start) < ticks) {
-    sema_down(&sema);
-  }
-  sema_up(&sema);
+
+  
+  enum intr_level old_level = intr_disable();
+  thread_current()->wakeup_time = start + ticks;
+  list_insert_ordered(&sleepers, &thread_current()->elem, (list_less_func *) &compare_wakeup_time, NULL);
+  thread_block();
+  intr_set_level(old_level);
+  
+
 
   
 }
@@ -180,8 +204,22 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  // Wake up any sleeping threads whose wakeup time has arrived
+  
+  while (!list_empty(&sleepers)) {
+    struct thread *sleep_thread = list_entry(list_front(&sleepers), struct thread, elem);
+    if (sleep_thread->wakeup_time <= ticks) {
+      list_pop_front(&sleepers);
+      thread_unblock(sleep_thread);
+    }
+    else {
+      break; // Since the list is ordered, we can stop checking further
+    }
+  }
   ticks++;
   thread_tick ();
+  
+  
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
