@@ -23,7 +23,6 @@ static int64_t ticks;
 
 static struct list sleepers; // List of sleeping threads
 
-static struct semaphore sema; // Semaphore to protect access to the sleepers list
 
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
@@ -43,10 +42,6 @@ timer_init (void)
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
   list_init(&sleepers);
-
-  // Initialize semaphore to protect access to the sleepers list
-  
-  sema_init(&sema, 1);
 }
 /* Calibrates loops_per_tick, used to implement brief delays. */
 void
