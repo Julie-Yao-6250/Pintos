@@ -41,10 +41,11 @@ void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
-
 bool return_highest_priority(const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux);
+
+void donation_helper(struct thread *donee);
 
 /* Optimization barrier.
 

@@ -30,7 +30,6 @@ static unsigned loops_per_tick;
 
 static intr_handler_func timer_interrupt;
 static bool too_many_loops(unsigned loops);
-static bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux);
 static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 static void real_time_delay(int64_t num, int32_t denom);
@@ -85,15 +84,6 @@ int64_t
 timer_elapsed(int64_t then)
 {
   return timer_ticks() - then;
-}
-
-/* Compares the wakeup times of two sleeping threads to
-   determine their order in the sleepers list */
-bool compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-  int64_t wakeup_time_a = list_entry(a, struct thread, elem)->wakeup_time;
-  int64_t wakeup_time_b = list_entry(b, struct thread, elem)->wakeup_time;
-  return wakeup_time_a < wakeup_time_b;
 }
 
 /* Compares the wakeup times of two sleeping threads to 

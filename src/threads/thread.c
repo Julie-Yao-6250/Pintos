@@ -198,6 +198,11 @@ tid_t thread_create(const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock(t);
+
+  // Create donor list
+  list_init(&donor_list);
+  t->old_priority = priority;
+  t->desired_lock = NULL;
   // If the new thread has higher priority, let it run now
   yield_higher_priority();
 
@@ -337,7 +342,19 @@ void thread_set_priority(int new_priority)
   enum intr_level old_level;
   ASSERT(PRI_MIN <= new_priority && new_priority <= PRI_MAX);
   old_level = intr_disable();
+
+  // If higher 
+  if (new_priority > thread_current()->priority){
   thread_current()->priority = new_priority;
+  thread_current()->old_priority = new_priority;
+  }
+  // If lower
+  if (new_priority <= thread_current()->priority){
+  thread_current()->old_priority = new_priority;
+  if (list_empty(&thread_current()->donor_list)){
+    thread_current()->priority = new_priority;
+  }
+  }
   intr_set_level(old_level);
 
   yield_higher_priority();

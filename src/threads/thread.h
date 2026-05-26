@@ -93,6 +93,12 @@ struct thread
    /* Shared between thread.c and synch.c. */
    struct list_elem elem; /* List element. */
 
+   struct list donor_list;
+   struct list_elem donor_elem;
+   struct lock desired_lock;
+   // A donations original priority
+   int old_priority;
+
    /* Owned by timer.c */
    int64_t wakeup_time; /* Time to wake up. */
 

@@ -32,6 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+
 // Returns true if thread A has higher priority than thread B
 // Used to keep semaphore waiters ordered by priority
 static bool
@@ -212,11 +213,28 @@ void lock_init(struct lock *lock)
    we need to sleep. */
 void lock_acquire(struct lock *lock)
 {
+  enum intr_level old_level;
+
   ASSERT(lock != NULL);
   ASSERT(!intr_context());
   ASSERT(!lock_held_by_current_thread(lock));
 
+  old_level = intr_disable();
+
+  if (lock->holder != NULL && thread_current()->priority > lock->holder->priority){
+    list_push_back(&lock->holder->donor_list, &thread_current()->donor_elem);
+    thread_current()->desired_lock = lock;
+    lock->holder->priority = thread_current()->priority;
+  }
+
+  if(lock->holder != NULL && lock->holder->desired_lock != NULL){
+    donation_helper(lock->holder);
+  }
+
+  intr_set_level(old_level);
+
   sema_down(&lock->semaphore);
+  thread_current()->desired_lock = NULL;
   lock->holder = thread_current();
 }
 
@@ -246,8 +264,30 @@ bool lock_try_acquire(struct lock *lock)
    handler. */
 void lock_release(struct lock *lock)
 {
+  enum intr_level old_level;
   ASSERT(lock != NULL);
   ASSERT(lock_held_by_current_thread(lock));
+
+  old_level = intr_disable();
+  struct list_elem *e = list_begin (&thread_current()->donor_list); 
+  while (e != list_end (&thread_current()->donor_list)){
+    struct list_elem *next = list_next (e);
+    struct thread *t = list_entry(e, struct thread, donor_elem);
+    if (t->desired_lock == lock){
+      list_remove(e);
+    }
+    e = next;
+  }
+  thread_current()->priority = thread_current()->old_priority;
+  for (e = list_begin (&thread_current()->donor_list); e != list_end (&thread_current()->donor_list);
+    e = list_next (e))
+  {
+    struct thread *t = list_entry(e, struct thread, donor_elem);
+    if (t->priority > thread_current()->priority){
+      thread_current()->priority = t->priority;
+    }
+  }  
+  intr_set_level(old_level);
 
   lock->holder = NULL;
   sema_up(&lock->semaphore);
@@ -375,4 +415,14 @@ bool return_highest_priority(const struct list_elem *a,
   struct thread *thread_b = list_entry(b, struct thread, elem);
 
   return thread_a->priority > thread_b->priority;
+}
+
+void donation_helper(struct thread* donee){
+  if(donee->desired_lock != NULL && donee->desired_lock->holder != NULL && donee->desired_lock->holder->priority < donee->priority){
+    donee->desired_lock->holder->priority = donee->priority;
+  }
+
+  if(donee->desired_lock != NULL && donee->desired_lock->holder != NULL){
+    donation_helper(donee->desired_lock->holder);
+  }
 }
