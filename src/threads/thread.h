@@ -95,7 +95,7 @@ struct thread
 
    struct list donor_list;
    struct list_elem donor_elem;
-   struct lock desired_lock;
+   struct lock *desired_lock;
    // A donations original priority
    int old_priority;
 

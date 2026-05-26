@@ -198,11 +198,6 @@ tid_t thread_create(const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock(t);
-
-  // Create donor list
-  list_init(&donor_list);
-  t->old_priority = priority;
-  t->desired_lock = NULL;
   // If the new thread has higher priority, let it run now
   yield_higher_priority();
 
@@ -483,6 +478,10 @@ init_thread(struct thread *t, const char *name, int priority)
 
   old_level = intr_disable();
   list_push_back(&all_list, &t->allelem);
+  // Create donor list
+  list_init(&t->donor_list);
+  t->desired_lock = NULL;
+  t->old_priority = priority;
   intr_set_level(old_level);
 }
 
