@@ -100,6 +100,7 @@ compare_wakeup_time(const struct list_elem *a, const struct list_elem *b, void *
 void timer_sleep(int64_t ticks)
 {
   int64_t start = timer_ticks();
+  int64_t wakeup_time = start + ticks;
 
   ASSERT(intr_get_level() == INTR_ON);
   if (ticks <= 0)
@@ -107,16 +108,14 @@ void timer_sleep(int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON);
 
-  // while (timer_elapsed (start) < ticks) 
-  //   thread_yield ();
-
-  
-  
-  // Add the current thread to the ready queue and block it until the timer interrupt wakes it up
-
-  
   enum intr_level old_level = intr_disable();
-  thread_current()->wakeup_time = start + ticks;
+
+  if (timer_ticks() >= wakeup_time) {
+   intr_set_level(old_level);
+   return;
+  }
+
+  thread_current()->wakeup_time = wakeup_time;
   list_insert_ordered(&sleepers, &thread_current()->elem, (list_less_func *) &compare_wakeup_time, NULL);
   thread_block();
   intr_set_level(old_level);
@@ -194,7 +193,7 @@ static void
 timer_interrupt(struct intr_frame *args UNUSED)
 {
   // Wake up any sleeping threads whose wakeup time has arrived
-  
+  ticks++;
   while (!list_empty(&sleepers)) {
     struct thread *sleep_thread = list_entry(list_front(&sleepers), struct thread, elem);
     if (sleep_thread->wakeup_time <= ticks) {
@@ -205,7 +204,6 @@ timer_interrupt(struct intr_frame *args UNUSED)
       break; // Since the list is ordered, we can stop checking further
     }
   }
-  ticks++;
   thread_tick ();
   
   
