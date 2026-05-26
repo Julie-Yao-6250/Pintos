@@ -201,11 +201,17 @@ tid_t thread_create(const char *name, int priority,
   // If the new thread has higher priority, let it run now
   yield_higher_priority();
 
+    // Additions
+  if (t->priority > thread_get_priority())
+  {
+    thread_yield();
+  };
+
   return tid;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
-   again until awoken by thread_unblock().
+   again until woken by thread_unblock().
 
    This function must be called with interrupts turned off.  It
    is usually a better idea to use one of the synchronization
