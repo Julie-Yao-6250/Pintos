@@ -418,6 +418,10 @@ bool return_highest_priority(const struct list_elem *a,
 }
 
 void donation_helper(struct thread* donee){
+  // ASSERT(donee != NULL);
+  // ASSERT(donee->desired_lock != NULL);
+  // ASSERT(donee->desired_lock->holder != NULL);
+  
   if(donee->desired_lock != NULL && donee->desired_lock->holder != NULL && donee->desired_lock->holder->priority < donee->priority){
     donee->desired_lock->holder->priority = donee->priority;
   }

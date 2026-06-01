@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -73,6 +74,11 @@ static tid_t allocate_tid(void);
 
 static bool thread_priority_greater(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 static void yield_higher_priority(void);
+
+// mlfqs
+uint64_t load_avg;
+int ready_threads;
+uint64_t f = (1 << 14);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -137,6 +143,35 @@ void thread_tick(void)
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return();
+
+  if(thread_mlfqs)
+  {
+    // Recent_CPU -- On each timer tick 
+    if (thread_current() != idle_thread)
+    {
+      thread_current()->recent_cpu += f;
+    }
+
+    // On every second
+    // Calculate load_avg & Update every threads recent_CPU
+    if(timer_ticks () % TIMER_FREQ == 0){
+      load_avg_calc();
+      struct list_elem *e;
+      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+      {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        calc_recent_cpu(t);
+      }
+    }
+    if (timer_ticks() % 4 == 0){
+      struct list_elem *e;
+      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
+      {
+        struct thread *t = list_entry(e, struct thread, allelem);
+        calc_priority(t);
+      }
+    }
+  }
 }
 
 /* Prints thread statistics. */
@@ -220,6 +255,10 @@ void thread_block(void)
 {
   ASSERT(!intr_context());
   ASSERT(intr_get_level() == INTR_OFF);
+  if (thread_current() != idle_thread)
+  {
+    --ready_threads;
+  }
 
   thread_current()->status = THREAD_BLOCKED;
   schedule();
@@ -240,6 +279,9 @@ void thread_unblock(struct thread *t)
   ASSERT(is_thread(t));
 
   old_level = intr_disable();
+  if (t != idle_thread){
+    ++ready_threads;
+  }
   ASSERT(t->status == THREAD_BLOCKED);
   list_insert_ordered(&ready_list, &t->elem, thread_priority_greater, NULL);
   t->status = THREAD_READY;
@@ -292,6 +334,9 @@ void thread_exit(void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable();
+  if (thread_current() != idle_thread){
+    --ready_threads;
+  }
   list_remove(&thread_current()->allelem);
   thread_current()->status = THREAD_DYING;
   schedule();
@@ -355,6 +400,20 @@ void thread_set_priority(int new_priority)
   yield_higher_priority();
 }
 
+void calc_priority(struct thread *t)
+{
+  long new_pri = (PRI_MAX * f) - (t->recent_cpu / 4) - ((t->nice * f) * 2);
+  //ASSERT(PRI_MIN <= new_pri && new_pri <= PRI_MAX);
+  t->priority = ((new_pri + (f / 2)) / f);
+}
+
+void calc_recent_cpu(struct thread *t)
+{
+  uint64_t val = (2 * load_avg * t->recent_cpu) / (2 * load_avg + f);
+  val += (t->nice * f);
+  t->recent_cpu = val;
+}
+
 /* Returns the current thread's priority. */
 int thread_get_priority(void)
 {
@@ -362,30 +421,51 @@ int thread_get_priority(void)
 }
 
 /* Sets the current thread's nice value to NICE. */
-void thread_set_nice(int nice UNUSED)
+void thread_set_nice(int new_nice)
 {
-  /* Not yet implemented. */
+  enum intr_level old_level;
+  ASSERT(NICE_MIN <= new_nice && new_nice <= NICE_MAX);
+  old_level = intr_disable();
+  thread_current()->nice = new_nice;
+  calc_priority(thread_current());
+  intr_set_level(old_level);
 }
 
 /* Returns the current thread's nice value. */
 int thread_get_nice(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int thread_get_load_avg(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  uint64_t val = load_avg * 100;
+  return (val + ((1 << 14) / 2)) / (1 << 14);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int thread_get_recent_cpu(void)
 {
-  /* Not yet implemented. */
-  return 0;
+  uint64_t val = thread_current()->recent_cpu * 100;
+  return (val + ((1 << 14) / 2)) / (1 << 14);
+}
+
+void load_avg_calc(void)
+{
+  // load_avg = (59/60)*load_avg + (1/60)*ready_threads;
+  // f = 2 ^ 14;
+  uint64_t left_val = 59 * f;
+  uint64_t right_val = 1 * f;
+
+  left_val = left_val / 60;
+  left_val = left_val * load_avg;
+  left_val = (left_val + (f / 2)) / f;
+
+  right_val = right_val / 60;
+  right_val = right_val * ready_threads;
+
+  load_avg = left_val + right_val;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

@@ -23,6 +23,8 @@ typedef int tid_t;
 #define PRI_MIN 0      /* Lowest priority. */
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63     /* Highest priority. */
+#define NICE_MIN -20
+#define NICE_MAX 20
 
 /* A kernel thread or user process.
 
@@ -93,11 +95,15 @@ struct thread
    /* Shared between thread.c and synch.c. */
    struct list_elem elem; /* List element. */
 
+
    struct list donor_list;
    struct list_elem donor_elem;
    struct lock *desired_lock;
    // A donations original priority
    int old_priority;
+   // mlfqs things
+   int nice;
+   uint64_t recent_cpu;
 
    /* Owned by timer.c */
    int64_t wakeup_time; /* Time to wake up. */
@@ -146,5 +152,9 @@ int thread_get_nice(void);
 void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
+
+void load_avg_calc(void);
+void calc_recent_cpu(struct thread *t);
+void calc_priority(struct thread *t);
 
 #endif /* threads/thread.h */
