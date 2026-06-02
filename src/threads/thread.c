@@ -76,9 +76,8 @@ static bool thread_priority_greater(const struct list_elem *a, const struct list
 static void yield_higher_priority(void);
 
 // mlfqs
-uint64_t load_avg;
-int ready_threads;
-uint64_t f = (1 << 14);
+int64_t load_avg;
+int64_t f = (1 << 14);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -140,38 +139,37 @@ void thread_tick(void)
   else
     kernel_ticks++;
 
-  /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return();
+  // Increment recent_cpu once per tick for the running non-idle thread
+  if (thread_mlfqs && t != idle_thread)
+    t->recent_cpu += f;
 
-  if(thread_mlfqs)
+  if (thread_mlfqs && timer_ticks() % TIMER_FREQ == 0)
   {
-    // Recent_CPU -- On each timer tick 
-    if (thread_current() != idle_thread)
-    {
-      thread_current()->recent_cpu += f;
-    }
+    struct list_elem *e;
+    load_avg_calc();
 
-    // On every second
-    // Calculate load_avg & Update every threads recent_CPU
-    if(timer_ticks () % TIMER_FREQ == 0){
-      load_avg_calc();
-      struct list_elem *e;
-      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-      {
-        struct thread *t = list_entry(e, struct thread, allelem);
-        calc_recent_cpu(t);
-      }
-    }
-    if (timer_ticks() % 4 == 0){
-      struct list_elem *e;
-      for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e))
-      {
-        struct thread *t = list_entry(e, struct thread, allelem);
-        calc_priority(t);
-      }
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+    {
+      struct thread *t = list_entry(e, struct thread, allelem);
+      calc_recent_cpu(t);
     }
   }
+
+  // On every second
+  // Calculate load_avg & Update every threads recent_CPU
+  if (thread_mlfqs && timer_ticks() % 4 == 0)
+  {
+    struct list_elem *e;
+    for (e = list_begin(&all_list); e != list_end(&all_list); e = list_next(e))
+    {
+      struct thread *t = list_entry(e, struct thread, allelem);
+      calc_priority(t);
+    }
+    list_sort(&ready_list, thread_priority_greater, NULL);
+  }
+
+  if (++thread_ticks >= TIME_SLICE)
+    intr_yield_on_return();
 }
 
 /* Prints thread statistics. */
@@ -236,7 +234,7 @@ tid_t thread_create(const char *name, int priority,
   // If the new thread has higher priority, let it run now
   yield_higher_priority();
 
-    // Additions
+  // Additions
   if (t->priority > thread_get_priority())
   {
     thread_yield();
@@ -255,11 +253,6 @@ void thread_block(void)
 {
   ASSERT(!intr_context());
   ASSERT(intr_get_level() == INTR_OFF);
-  if (thread_current() != idle_thread)
-  {
-    --ready_threads;
-  }
-
   thread_current()->status = THREAD_BLOCKED;
   schedule();
 }
@@ -279,9 +272,6 @@ void thread_unblock(struct thread *t)
   ASSERT(is_thread(t));
 
   old_level = intr_disable();
-  if (t != idle_thread){
-    ++ready_threads;
-  }
   ASSERT(t->status == THREAD_BLOCKED);
   list_insert_ordered(&ready_list, &t->elem, thread_priority_greater, NULL);
   t->status = THREAD_READY;
@@ -334,9 +324,6 @@ void thread_exit(void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable();
-  if (thread_current() != idle_thread){
-    --ready_threads;
-  }
   list_remove(&thread_current()->allelem);
   thread_current()->status = THREAD_DYING;
   schedule();
@@ -383,17 +370,20 @@ void thread_set_priority(int new_priority)
   ASSERT(PRI_MIN <= new_priority && new_priority <= PRI_MAX);
   old_level = intr_disable();
 
-  // If higher 
-  if (new_priority > thread_current()->priority){
-  thread_current()->priority = new_priority;
-  thread_current()->old_priority = new_priority;
+  // If higher
+  if (new_priority > thread_current()->priority)
+  {
+    thread_current()->priority = new_priority;
+    thread_current()->old_priority = new_priority;
   }
   // If lower
-  if (new_priority <= thread_current()->priority){
-  thread_current()->old_priority = new_priority;
-  if (list_empty(&thread_current()->donor_list)){
-    thread_current()->priority = new_priority;
-  }
+  if (new_priority <= thread_current()->priority)
+  {
+    thread_current()->old_priority = new_priority;
+    if (list_empty(&thread_current()->donor_list))
+    {
+      thread_current()->priority = new_priority;
+    }
   }
   intr_set_level(old_level);
 
@@ -402,16 +392,25 @@ void thread_set_priority(int new_priority)
 
 void calc_priority(struct thread *t)
 {
-  long new_pri = (PRI_MAX * f) - (t->recent_cpu / 4) - ((t->nice * f) * 2);
-  //ASSERT(PRI_MIN <= new_pri && new_pri <= PRI_MAX);
-  t->priority = ((new_pri + (f / 2)) / f);
+  int64_t priority;
+
+  priority = PRI_MAX - (t->recent_cpu / f) / 4 - t->nice * 2;
+
+  if (priority < PRI_MIN)
+    priority = PRI_MIN;
+  else if (priority > PRI_MAX)
+    priority = PRI_MAX;
+
+  t->priority = priority;
 }
 
 void calc_recent_cpu(struct thread *t)
 {
-  uint64_t val = (2 * load_avg * t->recent_cpu) / (2 * load_avg + f);
-  val += (t->nice * f);
-  t->recent_cpu = val;
+  int64_t coefficient;
+
+  // recent_cpu = (2 * load_avg) / (2 * load_avg + 1) * recent_cpu + nice
+  coefficient = (2 * load_avg * f) / (2 * load_avg + f);
+  t->recent_cpu = (coefficient * t->recent_cpu) / f + t->nice * f;
 }
 
 /* Returns the current thread's priority. */
@@ -453,19 +452,14 @@ int thread_get_recent_cpu(void)
 
 void load_avg_calc(void)
 {
+  int ready_threads = list_size(&ready_list);
+
+  // The running thread counts unless it is the idle thread
+  if (thread_current() != idle_thread)
+    ready_threads++;
+
   // load_avg = (59/60)*load_avg + (1/60)*ready_threads;
-  // f = 2 ^ 14;
-  uint64_t left_val = 59 * f;
-  uint64_t right_val = 1 * f;
-
-  left_val = left_val / 60;
-  left_val = left_val * load_avg;
-  left_val = (left_val + (f / 2)) / f;
-
-  right_val = right_val / 60;
-  right_val = right_val * ready_threads;
-
-  load_avg = left_val + right_val;
+  load_avg = (59 * load_avg) / 60 + (ready_threads * f) / 60;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

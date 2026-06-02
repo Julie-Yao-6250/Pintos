@@ -95,7 +95,6 @@ struct thread
    /* Shared between thread.c and synch.c. */
    struct list_elem elem; /* List element. */
 
-
    struct list donor_list;
    struct list_elem donor_elem;
    struct lock *desired_lock;
@@ -103,7 +102,7 @@ struct thread
    int old_priority;
    // mlfqs things
    int nice;
-   uint64_t recent_cpu;
+   int64_t recent_cpu;
 
    /* Owned by timer.c */
    int64_t wakeup_time; /* Time to wake up. */
