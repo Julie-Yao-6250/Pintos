@@ -30,26 +30,70 @@ Anish Venkatesalu <anishv2@uci.edu>
 `struct' member, global or static variable, `typedef', or
 > > enumeration. Identify the purpose of each in 25 words or less.
 
+```c
+struct thread
+{
+   /* Owned by thread.c. */
+   tid_t tid;                 /* Thread identifier. */
+   enum thread_status status; /* Thread state. */
+   char name[16];             /* Name (for debugging purposes). */
+   uint8_t *stack;            /* Saved stack pointer. */
+   int priority;              /* Priority. */
+   struct list_elem allelem;  /* List element for all threads list. */
+
+   /* Shared between thread.c and synch.c. */
+   struct list_elem elem; /* List element. */
+
+   struct list donor_list;
+   struct list_elem donor_elem;
+   struct lock desired_lock;
+   // A donations original priority
+   int old_priority;
+
+   /* Owned by timer.c */
+   int64_t wakeup_time; /* Time to wake up. */
+
+#ifdef USERPROG
+   /* Owned by userprog/process.c. */
+   uint32_t *pagedir; /* Page directory. */
+#endif
+
+   /* Owned by thread.c. */
+   unsigned magic; /* Detects stack overflow. */
+};
+```
+For the timer sleep implementation, we incorporated a new attribute called wakeup_time to sort the list of threads. This helped us extract the smallest wakeup time thread.
+
 ---- ALGORITHMS ----
 
 > > A2: Briefly describe what happens in a call to timer_sleep(),
 > > including the effects of the timer interrupt handler.
 
+When timer_sleep is called, we calculate the wakeup time and inserted the thread (into a list) in sorted order based on wakeup time. Afterwards, the thread is blocked. The timer interrupt handler would then look at the first thread (if list is not empty) and compare with current tick.
+
 > > A3: What steps are taken to minimize the amount of time spent in
 > > the timer interrupt handler?
+
+To minimize the amount of time spent in the timer interrupt handler, we conducted the sorting insude timer_sleep, so the interrupt handler can simply extract the first node (taking O(1) time). Additionally, we check if it was empty (taking O(1) time) to prevent any unnecessary comparsion with current tick.
 
 ---- SYNCHRONIZATION ----
 
 > > A4: How are race conditions avoided when multiple threads call
 > > timer_sleep() simultaneously?
 
+To prevent race conditions when multiple threads call timer_sleep() simultaneously, we disabled interrupts when accessing the list of sleeping threads. This prevents context switching.
+
 > > A5: How are race conditions avoided when a timer interrupt occurs
 > > during a call to timer_sleep()?
+
+To avoid race condtions when a timer interrupt occurs, we disabled interrupts when accessing the list of sleeping threads as it prevents context switching. 
 
 ---- RATIONALE ----
 
 > > A6: Why did you choose this design? In what ways is it superior to
 > > another design you considered?
+
+We choose a simple disabling of interrupt approach rather than a semaphore or mutex because of its lack of overhead and faster speed (as it does not have to check threads). This is crucial especially for this system because time changes rapidly and any delay can results in waking up the thread late.
 
     		 PRIORITY SCHEDULING
     		 ===================
