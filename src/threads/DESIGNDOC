@@ -64,7 +64,10 @@ struct thread
    unsigned magic; /* Detects stack overflow. */
 };
 ```
-For the timer sleep implementation, we incorporated a new attribute called wakeup_time to sort the list of threads. This helped us extract the smallest wakeup time thread.
+```c
+static struct list sleepers;
+```
+For the timer sleep implementation, we incorporated a new attribute called wakeup_time to sort the list of sleeping threads. This helped us extract the smallest wakeup time thread.
 
 ---- ALGORITHMS ----
 
