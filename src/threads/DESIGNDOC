@@ -21,6 +21,8 @@ Anish Venkatesalu <anishv2@uci.edu>
 > > preparing your submission, other than the Pintos documentation, course
 > > text, lecture notes, and course staff.
 
+https://cplusplus.com/ -- for C functions review
+
     		     ALARM CLOCK
     		     ===========
 
@@ -213,6 +215,16 @@ the expected number of threads.
 `struct' member, global or static variable, `typedef', or
 > > enumeration. Identify the purpose of each in 25 words or less.
 
+   int nice;
+   uint64_t recent_cpu;
+   int64_t load_avg;
+   int64_t f = (1 << 14);
+   
+   nice -- Used in priority and recent_cpu to further calculate a threads priority against other threads.
+   recent_cpu -- Calculated for every thread and used in the mlfqs priority calculation.
+   load_avg -- System-wide value used in recent_cpu for each thread to calculate average number of threads ready to run in the past minute.
+   f -- Used to perform the 17.14 fixed-point number representation calculations to simulate real numbers
+
 ---- ALGORITHMS ----
 
 > > C2: Suppose threads A, B, and C have nice values 0, 1, and 2. Each
@@ -221,27 +233,43 @@ the expected number of threads.
 > > thread after each given number of timer ticks:
 
 timer recent_cpu priority thread
-ticks A B C A B C to run
+ticks A B C      A B C    to run
 
 ---
 
-0
-4
-8
-12
-16
-20
-24
-28
-32
-36
+0     0 0 0     63 61 59   A
+4     4 0 0     62 61 59   A
+8     8 0 0     61 61 59   A
+12   12 0 0     60 61 59   B
+16   12 4 0     60 60 59   B
+20   12 8 0     60 59 59   A
+24   16 8 0     59 59 59   A
+28   20 8 0     58 59 59   B
+32   20 12 0    58 58 59   C
+36   20 12 4    58 58 58   C
 
 > > C3: Did any ambiguities in the scheduler specification make values
 > > in the table uncertain? If so, what rule did you use to resolve
 > > them? Does this match the behavior of your scheduler?
 
+For the calculations that are performed on a multiple of a second or when 
+timer_ticks () % TIMER_FREQ == 0, our implementation kept the value of 100
+so they would not update within the above example. 
+
+When determining if a thread is higher priority than the current running thread,
+we decided that it must be higher and not equal to the current running thread.
+This also affects when all values are the same, because on every fourth tick 
+we recalculate the values for every element in the ready list and then re-sort.
+So at 28 ticks it takes B first.
+
 > > C4: How is the way you divided the cost of scheduling between code
 > > inside and outside interrupt context likely to affect performance?
+
+Because almost all of the updates rely on precise timer_tick() calculations,
+we are spending a lot of time in the interrupt handler which can mean that the actual 
+thread is taking longer to complete. We ran into this issue wiht one of the tests 
+where too much time in the interrupt put the test main thread into sleep and back into 
+ready, increasing load average.
 
 ---- RATIONALE ----
 
@@ -250,12 +278,33 @@ ticks A B C A B C to run
 > > time to work on this part of the project, how might you choose to
 > > refine or improve your design?
 
+Advantages would include using the 17.14 fixed-point number representation
+to keep the value calculations quick and efficient and we rely on using 
+built-in functions from pintos such as the list and thread fuctions.
+
+Main disadvantage is how much work is being handled in the interrupt context, 
+potentially artificially increasing calculated values. If I had extra time, I
+probably would try to implement bools inside the interrupt to be flagged and then
+processed outside of the interrupt.
+
 > > C6: The assignment explains arithmetic for fixed-point math in
 > > detail, but it leaves it open to you to implement it. Why did you
 > > decide to implement it the way you did? If you created an
 > > abstraction layer for fixed-point math, that is, an abstract data
 > > type and/or a set of functions or macros to manipulate fixed-point
 > > numbers, why did you do so? If not, why not?
+
+I followed the example provided in the project documentation of the
+17.14 fixed-point number representation. I felt that this was the 
+simplest implementation, as it only required a couple of calculations 
+within each function. Outside of just creating the global value for f,
+I did not create a set of functions specifically for fixed-point 
+just focusing on the value to be calculated 
+(load_avg, priority, recent_cpu). Again, it felt easiest to just perform
+calculations within the specific function as each function has slightly
+different operations. Perhaps it would be clearer to make a divide/mult
+function but it felt overkill at the time.
+
 
     		   SURVEY QUESTIONS
     		   ================
@@ -269,14 +318,29 @@ the quarter.
 > > In your opinion, was this assignment, or any one of the three problems
 > > in it, too easy or too hard? Did it take too long or too little time?
 
+I think that for one student in 3-4 weeks, or three over the course of a couple
+of weeks is a fair estimate of the workload alongside other classes/coursework.
+They were all simple in coding but challenging at first to understand.
+
 > > Did you find that working on a particular part of the assignment gave
 > > you greater insight into some aspect of OS design?
+
+I enjoyed the concept of nested donation, that gave me a greater idea of 
+systems with many threads running at a time and all involved synchronization.
 
 > > Is there some particular fact or hint we should give students in
 > > future quarters to help them solve the problems? Conversely, did you
 > > find any of our guidance to be misleading?
 
+I think the doc is nice and lays things out clearly. Showing where most of 
+the work is done is enough of a hint I feel. Discussions on the project
+were well done.
+
 > > Do you have any suggestions for the TAs to more effectively assist
 > > students, either for future quarters or the remaining projects?
 
+Bring back the discussions/slides to assist.
+
 > > Any other comments?
+
+I enjoyed the class!
